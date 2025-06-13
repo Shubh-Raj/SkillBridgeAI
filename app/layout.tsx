@@ -3,9 +3,11 @@ import { Mona_Sans } from "next/font/google";
 import "./globals.css";
 
 const monaSans = Mona_Sans({
-  variable: "--font-mona-sans",
   subsets: ["latin"],
+  display: "swap",
+  variable: "--font-mona-sans",
 });
+
 
 export const metadata: Metadata = {
   title: "SkillBridge",
