@@ -79,59 +79,74 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
     }
 
     const extractInterviewDetails = (messages: SavedMessage[]) => {
+        // Extract questions from the conversation
         const assistantMessages = messages.filter(msg => msg.role === 'assistant');
         let extractedQuestions: string[] = [];
         let role = 'Software Developer';
         let level = 'Junior';
         let type = 'Technical';
         let techstack = ['JavaScript', 'React'];
+        let foundQuestionsInFormat = false;
         
+        // Try to extract questions from the conversation
+        // Look for content that contains arrays or list-like structures
         for (const msg of assistantMessages) {
             const content = msg.content;
             
+            // Look for role information
             const roleMatch = content.match(/(?:role|position)(?:\s+is)?(?:\s*:)?\s*([\w\s-]+Developer|[\w\s-]+Engineer|[\w\s-]+Designer|[\w\s-]+Manager)/i);
             if (roleMatch) role = roleMatch[1].trim();
             
+            // Look for level information
             const levelMatch = content.match(/(?:level|experience)(?:\s+is)?(?:\s*:)?\s*(Junior|Mid|Senior|Lead|Principal)/i);
             if (levelMatch) level = levelMatch[1].trim();
             
+            // Look for type information
             const typeMatch = content.match(/(?:focus|type)(?:\s+is)?(?:\s*:)?\s*(Technical|Behavioral|Mixed)/i);
             if (typeMatch) type = typeMatch[1].trim();
             
+            // Look for tech stack information
             const techMatch = content.match(/(?:tech stack|technologies|skills)(?:\s+include)?(?:\s*:)?\s*([\w\s,.]+)/i);
             if (techMatch) {
                 techstack = techMatch[1].split(/[,.]/).map(item => item.trim()).filter(Boolean);
             }
             
-            const arrayMatch = content.match(/\[([^\]]+)\]/);
-            if (arrayMatch) {
-                try {
-                    const array = JSON.parse(`[${arrayMatch[1]}]`);
-                    if (Array.isArray(array) && array.every(item => typeof item === 'string')) {
-                        extractedQuestions = array;
-                        continue;
+            // Only try to find questions if we haven't found them in a structured format yet
+            if (!foundQuestionsInFormat) {
+                // Try to find questions in an array format ["Q1", "Q2"]
+                const arrayMatch = content.match(/\[([^\]]+)\]/);
+                if (arrayMatch) {
+                    try {
+                        const array = JSON.parse(`[${arrayMatch[1]}]`);
+                        if (Array.isArray(array) && array.every(item => typeof item === 'string')) {
+                            extractedQuestions = array;
+                            foundQuestionsInFormat = true;
+                            continue;
+                        }
+                    } catch (e) {
+                        // If JSON parsing fails, try other methods
                     }
-                } catch (e) {
-                    // If JSON parsing fails, try other methods
                 }
-            }
-            
-            // Look for numbered questions (1. Question)
-            const numberedQuestions = content.match(/\d+\.\s*(.*?)(?=\d+\.|$)/g);
-            if (numberedQuestions && numberedQuestions.length > 0) {
-                extractedQuestions = numberedQuestions.map(q => 
-                    q.replace(/^\d+\.\s*/, '').trim()
-                ).filter(Boolean);
-                continue;
-            }
-            
-            // Look for bullet point questions (- Question or • Question)
-            const bulletQuestions = content.match(/[-•]\s*(.*?)(?=[-•]|$)/g);
-            if (bulletQuestions && bulletQuestions.length > 0) {
-                extractedQuestions = bulletQuestions.map(q => 
-                    q.replace(/^[-•]\s*/, '').trim()
-                ).filter(Boolean);
-                continue;
+                
+                // Look for numbered questions (1. Question)
+                const numberedQuestions = content.match(/\d+\.\s*(.*?)(?=\d+\.|$)/g);
+                if (numberedQuestions && numberedQuestions.length > 0) {
+                    extractedQuestions = numberedQuestions.map(q => 
+                        q.replace(/^\d+\.\s*/, '').trim()
+                    ).filter(Boolean);
+                    foundQuestionsInFormat = true;
+                    continue;
+                }
+                
+                // Look for bullet point questions (- Question or • Question)
+                const bulletQuestions = content.match(/[-•]\s*(.*?)(?=[-•]|$)/g);
+                if (bulletQuestions && bulletQuestions.length > 0) {
+                    extractedQuestions = bulletQuestions.map(q => 
+                        q.replace(/^[-•]\s*/, '').trim()
+                    ).filter(Boolean);
+                    foundQuestionsInFormat = true;
+                    continue;
+                }
             }
         }
 
@@ -145,6 +160,9 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
                         .filter(q => q.length > 5 && q !== '?')
                 );
         }
+        
+        // Remove duplicate questions
+        extractedQuestions = [...new Set(extractedQuestions)];
 
         return {
             questions: extractedQuestions,

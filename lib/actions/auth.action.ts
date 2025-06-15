@@ -116,3 +116,20 @@ export async function isAuthenticated() {
 
     return !!user;
 }
+
+export async function signOut() {
+    const cookieStore = await cookies();
+    
+    // Remove the session cookie by setting it with a past expiry
+    cookieStore.set('session', '', {
+        expires: new Date(0),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        sameSite: 'lax'
+    });
+    
+    return {
+        success: true
+    };
+}
