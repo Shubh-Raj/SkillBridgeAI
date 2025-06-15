@@ -25,6 +25,7 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
     const [messages, setMessages] = useState<SavedMessage[]>([]);
+    const [isCreatingInterview, setIsCreatingInterview] = useState(false);
 
     useEffect(() => {
         const onCallStart = () => setCallStatus(CallStatus.ACTIVE);
@@ -77,10 +78,141 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
         }
     }
 
+    const extractInterviewDetails = (messages: SavedMessage[]) => {
+        const assistantMessages = messages.filter(msg => msg.role === 'assistant');
+        let extractedQuestions: string[] = [];
+        let role = 'Software Developer';
+        let level = 'Junior';
+        let type = 'Technical';
+        let techstack = ['JavaScript', 'React'];
+        
+        for (const msg of assistantMessages) {
+            const content = msg.content;
+            
+            const roleMatch = content.match(/(?:role|position)(?:\s+is)?(?:\s*:)?\s*([\w\s-]+Developer|[\w\s-]+Engineer|[\w\s-]+Designer|[\w\s-]+Manager)/i);
+            if (roleMatch) role = roleMatch[1].trim();
+            
+            const levelMatch = content.match(/(?:level|experience)(?:\s+is)?(?:\s*:)?\s*(Junior|Mid|Senior|Lead|Principal)/i);
+            if (levelMatch) level = levelMatch[1].trim();
+            
+            const typeMatch = content.match(/(?:focus|type)(?:\s+is)?(?:\s*:)?\s*(Technical|Behavioral|Mixed)/i);
+            if (typeMatch) type = typeMatch[1].trim();
+            
+            const techMatch = content.match(/(?:tech stack|technologies|skills)(?:\s+include)?(?:\s*:)?\s*([\w\s,.]+)/i);
+            if (techMatch) {
+                techstack = techMatch[1].split(/[,.]/).map(item => item.trim()).filter(Boolean);
+            }
+            
+            const arrayMatch = content.match(/\[([^\]]+)\]/);
+            if (arrayMatch) {
+                try {
+                    const array = JSON.parse(`[${arrayMatch[1]}]`);
+                    if (Array.isArray(array) && array.every(item => typeof item === 'string')) {
+                        extractedQuestions = array;
+                        continue;
+                    }
+                } catch (e) {
+                    // If JSON parsing fails, try other methods
+                }
+            }
+            
+            // Look for numbered questions (1. Question)
+            const numberedQuestions = content.match(/\d+\.\s*(.*?)(?=\d+\.|$)/g);
+            if (numberedQuestions && numberedQuestions.length > 0) {
+                extractedQuestions = numberedQuestions.map(q => 
+                    q.replace(/^\d+\.\s*/, '').trim()
+                ).filter(Boolean);
+                continue;
+            }
+            
+            // Look for bullet point questions (- Question or • Question)
+            const bulletQuestions = content.match(/[-•]\s*(.*?)(?=[-•]|$)/g);
+            if (bulletQuestions && bulletQuestions.length > 0) {
+                extractedQuestions = bulletQuestions.map(q => 
+                    q.replace(/^[-•]\s*/, '').trim()
+                ).filter(Boolean);
+                continue;
+            }
+        }
+
+        // If no questions found, extract potential questions
+        if (extractedQuestions.length === 0) {
+            extractedQuestions = assistantMessages
+                .filter(msg => msg.content.includes('?'))
+                .flatMap(msg => 
+                    msg.content.split('?')
+                        .map(q => q.trim() + '?')
+                        .filter(q => q.length > 5 && q !== '?')
+                );
+        }
+
+        return {
+            questions: extractedQuestions,
+            role,
+            level,
+            type,
+            techstack: techstack.filter(Boolean)
+        };
+    }
+
+    const createInterviewFromConversation = async (messages: SavedMessage[]) => {
+        if (!userId) {
+            console.error("User ID is required to create an interview");
+            return false;
+        }
+
+        try {
+            setIsCreatingInterview(true);
+            
+            const interviewDetails = extractInterviewDetails(messages);
+            console.log("Extracted interview details:", interviewDetails);
+            
+            // Make sure we have at least some questions
+            if (interviewDetails.questions.length === 0) {
+                console.error("No questions extracted from the conversation");
+                return false;
+            }
+            
+            // Post to API to create interview
+            const response = await fetch('/api/vapi/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    userid: userId,
+                    questions: interviewDetails.questions,
+                    role: interviewDetails.role,
+                    level: interviewDetails.level,
+                    type: interviewDetails.type,
+                    techstack: interviewDetails.techstack.join(','),
+                    amount: interviewDetails.questions.length
+                }),
+            });
+            
+            const result = await response.json();
+            
+            return result.success;
+        } catch (error) {
+            console.error("Error creating interview:", error);
+            return false;
+        } finally {
+            setIsCreatingInterview(false);
+        }
+    }
+
     useEffect(() => {
         if (callStatus === CallStatus.FINISHED) {
             if (type === 'generate') {
-                router.push('/')
+                createInterviewFromConversation(messages)
+                    .then(success => {
+                        if (success) {
+                            console.log("Interview created successfully");
+                        } else {
+                            console.error("Failed to create interview");
+                        }
+                        router.push('/');
+                    });
             } else {
                 handleGenerateFeedback(messages);
             }
@@ -90,26 +222,38 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
     const handleCall = async () => {
         setCallStatus(CallStatus.CONNECTING);
 
-        if (type === "generate") {
-            await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-                variableValues: {
-                    username: userName,
-                    userid: userId,
-                },
-            });
-        } else {
-            let formattedQuestions = "";
-            if (questions) {
-                formattedQuestions = questions
-                    .map((question) => `- ${question}`)
-                    .join("\n");
-            }
+        try {
+            if (type === "generate") {
+                // For generator, use the workflow ID directly
+                await vapi.start(
+                    undefined, // No assistant 
+                    undefined, // No assistant overrides
+                    undefined, // No squad
+                    process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID // Workflow ID
+                );
+            } else {
+                let formattedQuestions = "";
+                if (questions) {
+                    formattedQuestions = questions
+                        .map((question) => `- ${question}`)
+                        .join("\n");
+                }
 
-            await vapi.start(interviewer, {
-                variableValues: {
-                    questions: formattedQuestions,
-                },
-            });
+                // For interviewer, use the assistant definition with variable values
+                const assistantOverrides = {
+                    variableValues: {
+                        questions: formattedQuestions,
+                    },
+                } as any; // Type assertion to bypass strict type checking
+
+                await vapi.start(
+                    interviewer, // Use the interviewer assistant
+                    assistantOverrides
+                );
+            }
+        } catch (error) {
+            console.error("Error starting call:", error);
+            setCallStatus(CallStatus.INACTIVE);
         }
     };
 
@@ -151,12 +295,19 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
 
             <div className="w-full flex justify-center">
                 {callStatus !== 'ACTIVE' ? (
-                    <button className="relative btn-call" onClick={handleCall}>
-                        <span className={cn('absolute animate-ping rounded-full opacity-75', callStatus !== 'CONNECTING' && 'hidden')}
+                    <button 
+                        className="relative btn-call" 
+                        onClick={handleCall}
+                        disabled={isCreatingInterview}
+                    >
+                        <span className={cn('absolute animate-ping rounded-full opacity-75', 
+                            callStatus !== 'CONNECTING' && !isCreatingInterview && 'hidden')}
                         />
 
                         <span>
-                            {isCallInactiveOrFinished ? 'Call' : '. . .'}
+                            {isCallInactiveOrFinished ? 
+                                (isCreatingInterview ? 'Creating Interview...' : 'Call') : 
+                                '. . .'}
                         </span>
                     </button>
                 ) : (
