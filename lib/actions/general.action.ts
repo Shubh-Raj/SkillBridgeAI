@@ -5,12 +5,18 @@ import {generateObject} from "ai";
 import {google} from "@ai-sdk/google";
 import {feedbackSchema} from "@/constants";
 
-export async function getInterviewsByUserId(userId: string): Promise<Interview[] | null> {
-    const interviews = await db
+export async function getInterviewsByUserId(userId: string, limitCount: number = 20, startAfterDate?: string): Promise<Interview[] | null> {
+    let query = db
         .collection('interviews')
         .where('userId', '==', userId)
         .orderBy('createdAt', 'desc')
-        .get();
+        .limit(limitCount);
+
+    if (startAfterDate) {
+        query = query.startAfter(startAfterDate);
+    }
+
+    const interviews = await query.get();
 
     return interviews.docs.map((doc) => ({
         id: doc.id,
@@ -19,15 +25,20 @@ export async function getInterviewsByUserId(userId: string): Promise<Interview[]
 }
 
 export async function getLatestInterviews(params: GetLatestInterviewsParams): Promise<Interview[] | null> {
-    const { userId, limit = 20 } = params;
+    const { userId, limit = 20, startAfterDate } = params;
 
-    const interviews = await db
+    let query = db
         .collection('interviews')
         .orderBy('createdAt', 'desc')
         .where('finalized', '==', true)
         .where('userId', '!=', userId)
-        .limit(limit)
-        .get();
+        .limit(limit);
+
+    if (startAfterDate) {
+        query = query.startAfter(startAfterDate);
+    }
+
+    const interviews = await query.get();
 
     return interviews.docs.map((doc) => ({
         id: doc.id,
@@ -54,7 +65,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
             )).join('');
 
         const { object: { totalScore, categoryScores, strengths, areasForImprovement, finalAssessment } } = await generateObject({
-            model: google('gemini-2.0-flash-001', {
+            model: google('gemini-2.5-flash', {
                 structuredOutputs: false,
             }),
             schema: feedbackSchema,
