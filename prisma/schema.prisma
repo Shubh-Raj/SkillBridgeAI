@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id         String      @id
+  name       String
+  email      String      @unique
+  createdAt  DateTime    @default(now()) @map("created_at")
+  interviews Interview[]
+
+  @@map("users")
+}
+
+model Interview {
+  id         String    @id @default(uuid())
+  role       String
+  level      String
+  type       String
+  techstack  String[]
+  finalized  Boolean   @default(false)
+  coverImage String?   @map("cover_image")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  questions  Question[]
+  feedback   Feedback?
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("interviews")
+}
+
+model Question {
+  id          String    @id @default(uuid())
+  content     String
+  position    Int
+
+  interviewId String    @map("interview_id")
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId])
+  @@map("questions")
+}
+
+model Feedback {
+  id                  String          @id @default(uuid())
+  totalScore          Int             @map("total_score")
+  strengths           String[]
+  areasForImprovement String[]        @map("areas_for_improvement")
+  finalAssessment     String          @map("final_assessment")
+  createdAt           DateTime        @default(now()) @map("created_at")
+
+  interviewId         String          @unique @map("interview_id")
+  interview           Interview       @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  categoryScores      CategoryScore[]
+
+  @@index([interviewId])
+  @@map("feedback")
+}
+
+model CategoryScore {
+  id         String   @id @default(uuid())
+  name       String
+  score      Int
+  comment    String
+
+  feedbackId String   @map("feedback_id")
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackId])
+  @@map("category_scores")
+}

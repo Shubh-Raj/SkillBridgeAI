@@ -1,8 +1,6 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
 
-// Initialize Firebase Admin SDK - only one instance is needed
 function initFirebaseAdmin() {
   const apps = getApps();
 
@@ -11,7 +9,6 @@ function initFirebaseAdmin() {
       credential: cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        // Replace newlines in the private key
         privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
       }),
     });
@@ -19,8 +16,7 @@ function initFirebaseAdmin() {
 
   return {
     auth: getAuth(),
-    db: getFirestore(),
   };
 }
 
-export const { auth, db } = initFirebaseAdmin();
+export const { auth } = initFirebaseAdmin();
