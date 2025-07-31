@@ -1,120 +1,81 @@
 'use server';
 
-import { auth } from "@/firebase/admin";
-import { db } from "@/lib/db";
-import { cookies } from "next/headers";
+import {
+  createUserRecord,
+  verifyFirebaseUser,
+  createSession,
+  destroySession,
+  resolveCurrentUser,
+} from "@/lib/services/auth.service";
 
-const ONE_WEEK = 60 * 60 * 24 * 7;
+// ─── Auth Actions ─────────────────────────────────────────────────────────────
+// Thin Server Action layer — handles errors and delegates to the auth service.
 
-export async function signUp(params: SignUpParams) {
-  const { uid, name, email } = params;
-
+export async function signUp(
+  params: SignUpParams
+): Promise<{ success: boolean; message: string }> {
   try {
-    const existingUser = await db.user.findUnique({ where: { id: uid } });
-
-    if (existingUser) {
-      return {
-        success: false,
-        message: "User already exists. Please sign in instead.",
-      };
-    }
-
-    await db.user.create({
-      data: { id: uid, name, email },
+    return await createUserRecord({
+      uid: params.uid,
+      name: params.name,
+      email: params.email,
     });
-
-    return {
-      success: true,
-      message: "Account created successfully. Please sign in.",
-    };
   } catch (e: any) {
-    console.error("Error creating a user", e);
+    console.error("[signUp]", e);
 
     if (e.code === "auth/email-already-exists") {
-      return {
-        success: false,
-        message: "This email is already in use.",
-      };
+      return { success: false, message: "This email is already in use." };
     }
 
-    return { success: false, message: "Failed to create an account" };
+    return { success: false, message: "Failed to create an account." };
   }
 }
 
-export async function signIn(params: SignInParams) {
-  const { email, idToken } = params;
-
+export async function signIn(
+  params: SignInParams
+): Promise<{ success: boolean; message: string }> {
   try {
-    const userRecord = await auth.getUserByEmail(email);
+    const userExists = await verifyFirebaseUser(params.email);
 
-    if (!userRecord) {
+    if (!userExists) {
       return {
         success: false,
         message: "User does not exist. Create an account instead.",
       };
     }
 
-    await setSessionCookie(idToken);
+    await createSession(params.idToken);
+    return { success: true, message: "Signed in successfully." };
   } catch (e) {
-    console.log(e);
-
+    console.error("[signIn]", e);
     return { success: false, message: "Failed to log into an account." };
   }
 }
 
-export async function setSessionCookie(idToken: string) {
-  const cookieStore = await cookies();
-
-  const sessionCookie = await auth.createSessionCookie(idToken, {
-    expiresIn: ONE_WEEK * 1000,
-  });
-
-  cookieStore.set("session", sessionCookie, {
-    maxAge: ONE_WEEK,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    sameSite: "lax",
-  });
+export async function setSessionCookie(idToken: string): Promise<void> {
+  await createSession(idToken);
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session")?.value;
-
-  if (!sessionCookie) return null;
-
   try {
-    const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
-
-    const user = await db.user.findUnique({
-      where: { id: decodedClaims.uid },
-    });
-
-    if (!user) return null;
-
-    return { id: user.id, name: user.name, email: user.email };
+    return await resolveCurrentUser();
   } catch (e) {
-    console.log(e);
+    console.error("[getCurrentUser]", e);
     return null;
   }
 }
 
-export async function isAuthenticated() {
+export async function isAuthenticated(): Promise<boolean> {
   const user = await getCurrentUser();
   return !!user;
 }
 
-export async function signOut() {
-  const cookieStore = await cookies();
-
-  cookieStore.set("session", "", {
-    expires: new Date(0),
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    sameSite: "lax",
-  });
-
-  return { success: true };
+export async function signOut(): Promise<{ success: boolean }> {
+  try {
+    await destroySession();
+    return { success: true };
+  } catch (e) {
+    console.error("[signOut]", e);
+    return { success: false };
+  }
 }

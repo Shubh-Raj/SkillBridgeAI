@@ -1,31 +1,19 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
-import { getRandomInterviewCover } from "@/lib/utils";
-import { db } from "@/lib/db";
+import { createInterview } from "@/lib/services/interview.service";
 
 export async function GET() {
   return Response.json({ success: true, data: "THANK YOU!" }, { status: 200 });
 }
 
 export async function POST(request: Request) {
-  const {
-    type,
-    role,
-    level,
-    techstack,
-    amount,
-    userid,
-    questions: providedQuestions,
-  } = await request.json();
+  const { type, role, level, techstack, amount, userid, questions: providedQuestions } =
+    await request.json();
 
   try {
     let questions: string[];
 
-    if (
-      providedQuestions &&
-      Array.isArray(providedQuestions) &&
-      providedQuestions.length > 0
-    ) {
+    if (providedQuestions?.length > 0) {
       questions = providedQuestions;
     } else {
       const { text: questionsText } = await generateText({
@@ -57,27 +45,18 @@ export async function POST(request: Request) {
       ? techstack
       : techstack.split(",").map((t: string) => t.trim());
 
-    await db.interview.create({
-      data: {
-        role,
-        type,
-        level,
-        techstack: techstackArray,
-        finalized: true,
-        coverImage: getRandomInterviewCover(),
-        userId: userid,
-        questions: {
-          create: questions.map((content, position) => ({ content, position })),
-        },
-      },
+    await createInterview({
+      role,
+      type,
+      level,
+      techstack: techstackArray,
+      questions,
+      userId: userid,
     });
 
     return Response.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error("Error in /api/vapi/generate:", error);
-    return Response.json(
-      { success: false, error: String(error) },
-      { status: 500 }
-    );
+    console.error("[POST /api/vapi/generate]", error);
+    return Response.json({ success: false, error: String(error) }, { status: 500 });
   }
 }
