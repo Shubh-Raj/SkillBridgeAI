@@ -16,6 +16,8 @@
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-slot": "^1.2.3",
     "@types/pg": "^8.20.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "@vapi-ai/web": "^2.3.0",
     "ai": "^4.3.16",
     "class-variance-authority": "^0.7.1",
