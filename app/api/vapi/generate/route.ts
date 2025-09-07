@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { createInterview } from "@/lib/services/interview.service";
+import { logger } from "@/lib/logger";
 
 export async function GET() {
   return Response.json({ success: true, data: "THANK YOU!" }, { status: 200 });
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
 
   try {
     let questions: string[];
+    const startTime = performance.now();
 
     if (providedQuestions?.length > 0) {
       questions = providedQuestions;
@@ -41,6 +43,9 @@ export async function POST(request: Request) {
       }
     }
 
+    const durationMs = Math.round(performance.now() - startTime);
+    logger.info({ userId: userid, role, durationMs }, "Generated interview questions successfully");
+
     const techstackArray = Array.isArray(techstack)
       ? techstack
       : techstack.split(",").map((t: string) => t.trim());
@@ -56,7 +61,7 @@ export async function POST(request: Request) {
 
     return Response.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error("[POST /api/vapi/generate]", error);
+    logger.error({ err: error, userId: userid }, "[POST /api/vapi/generate] Failed to generate or save interview");
     return Response.json({ success: false, error: String(error) }, { status: 500 });
   }
 }

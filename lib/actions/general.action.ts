@@ -9,11 +9,7 @@ import {
   generateAndSaveFeedback,
   fetchFeedbackByInterviewId,
 } from "@/lib/services/feedback.service";
-
-// ─── Interview Actions ────────────────────────────────────────────────────────
-// These are Next.js Server Actions. They are intentionally thin —
-// they exist only to expose service functions to the React component tree.
-// No database calls, no business logic, no AI calls live here.
+import { logger } from "@/lib/logger";
 
 export async function getInterviewsByUserId(
   userId: string,
@@ -23,7 +19,7 @@ export async function getInterviewsByUserId(
   try {
     return await fetchInterviewsByUserId(userId, limitCount, startAfterDate);
   } catch (e) {
-    console.error("[getInterviewsByUserId]", e);
+    logger.error({ err: e, userId }, "[getInterviewsByUserId]");
     return null;
   }
 }
@@ -34,7 +30,7 @@ export async function getLatestInterviews(
   try {
     return await fetchLatestInterviews(params);
   } catch (e) {
-    console.error("[getLatestInterviews]", e);
+    logger.error({ err: e, params }, "[getLatestInterviews]");
     return null;
   }
 }
@@ -45,12 +41,10 @@ export async function getInterviewById(
   try {
     return await fetchInterviewById(id);
   } catch (e) {
-    console.error("[getInterviewById]", e);
+    logger.error({ err: e, id }, "[getInterviewById]");
     return null;
   }
 }
-
-// ─── Feedback Actions ─────────────────────────────────────────────────────────
 
 export async function createFeedback(
   params: CreateFeedbackParams
@@ -58,7 +52,7 @@ export async function createFeedback(
   try {
     return await generateAndSaveFeedback(params);
   } catch (e) {
-    console.error("[createFeedback]", e);
+    logger.error({ err: e, params }, "[createFeedback]");
     return { success: false };
   }
 }
@@ -69,7 +63,7 @@ export async function getFeedbackByInterviewId(
   try {
     return await fetchFeedbackByInterviewId(params);
   } catch (e) {
-    console.error("[getFeedbackByInterviewId]", e);
+    logger.error({ err: e, params }, "[getFeedbackByInterviewId]");
     return null;
   }
 }

@@ -7,9 +7,8 @@ import {
   destroySession,
   resolveCurrentUser,
 } from "@/lib/services/auth.service";
+import { logger } from "@/lib/logger";
 
-// ─── Auth Actions ─────────────────────────────────────────────────────────────
-// Thin Server Action layer — handles errors and delegates to the auth service.
 
 export async function signUp(
   params: SignUpParams
@@ -21,7 +20,7 @@ export async function signUp(
       email: params.email,
     });
   } catch (e: any) {
-    console.error("[signUp]", e);
+    logger.error({ err: e, uid: params.uid, email: params.email }, "[signUp]");
 
     if (e.code === "auth/email-already-exists") {
       return { success: false, message: "This email is already in use." };
@@ -47,7 +46,7 @@ export async function signIn(
     await createSession(params.idToken);
     return { success: true, message: "Signed in successfully." };
   } catch (e) {
-    console.error("[signIn]", e);
+    logger.error({ err: e, email: params.email }, "[signIn]");
     return { success: false, message: "Failed to log into an account." };
   }
 }
@@ -60,7 +59,7 @@ export async function getCurrentUser(): Promise<User | null> {
   try {
     return await resolveCurrentUser();
   } catch (e) {
-    console.error("[getCurrentUser]", e);
+    logger.error({ err: e }, "[getCurrentUser]");
     return null;
   }
 }
@@ -75,7 +74,7 @@ export async function signOut(): Promise<{ success: boolean }> {
     await destroySession();
     return { success: true };
   } catch (e) {
-    console.error("[signOut]", e);
+    logger.error({ err: e }, "[signOut]");
     return { success: false };
   }
 }

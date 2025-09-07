@@ -3,6 +3,7 @@ import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { feedbackSchema } from "@/constants";
 import { finalizeInterview } from "./interview.service";
+import { logger } from "@/lib/logger";
 
 // ─── Feedback Service ─────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ export async function generateAndSaveFeedback(
     .map((s) => `- ${s.role}: ${s.content}\n`)
     .join("");
 
+  const startTime = performance.now();
+
   const { object: aiResult } = await generateObject({
     model: google("gemini-2.5-flash", { structuredOutputs: false }),
     schema: feedbackSchema,
@@ -39,6 +42,9 @@ export async function generateAndSaveFeedback(
     system:
       "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
   });
+
+  const durationMs = Math.round(performance.now() - startTime);
+  logger.info({ interviewId, durationMs }, "Successfully generated AI feedback");
 
   const feedback = await db.feedback.create({
     data: {
