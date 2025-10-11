@@ -4,17 +4,34 @@ import { google } from "@ai-sdk/google";
 import { feedbackSchema } from "@/constants";
 import { finalizeInterview } from "./interview.service";
 import { logger } from "@/lib/logger";
+import {Client} from "@upstash/qstash";
 
-// ─── Feedback Service ─────────────────────────────────────────────────────────
+const qstash = new Client({ token: process.env.QSTASH_TOKEN! });
 
-/**
- * Orchestrates the entire post-interview pipeline:
- * 1. Formats the raw transcript into a prompt-ready string.
- * 2. Calls the Gemini API to generate structured feedback.
- * 3. Persists the feedback and all category scores in a single atomic transaction.
- * 4. Marks the parent interview as finalized.
- */
-export async function generateAndSaveFeedback(
+export async function publishFeedbackJob(params: CreateFeedbackParams) {
+  const { interviewId, transcript, userId } = params;
+
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    
+    const res = await qstash.publishJSON({
+      url: `${baseUrl}/api/webhooks/feedback`,
+      body: {
+        interviewId,
+        transcript,
+        userId,
+      },
+    });
+
+    logger.info({ messageId: res.messageId, interviewId }, "Queued feedback job to QStash");
+    return { success: true, messageId: res.messageId };
+  } catch (error) {
+    logger.error({ err: error, interviewId }, "Failed to enqueue feedback job");
+    throw error;
+  }
+}
+
+export async function processFeedbackJob(
   params: CreateFeedbackParams
 ): Promise<{ success: true; feedbackId: string } | { success: false }> {
   const { interviewId, transcript } = params;

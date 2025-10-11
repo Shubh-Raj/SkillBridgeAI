@@ -6,7 +6,7 @@ import {
   fetchInterviewById,
 } from "@/lib/services/interview.service";
 import {
-  generateAndSaveFeedback,
+  publishFeedbackJob,
   fetchFeedbackByInterviewId,
 } from "@/lib/services/feedback.service";
 import { logger } from "@/lib/logger";
@@ -48,9 +48,9 @@ export async function getInterviewById(
 
 export async function createFeedback(
   params: CreateFeedbackParams
-): Promise<{ success: boolean; feedbackId?: string }> {
+): Promise<{ success: boolean; messageId?: string }> {
   try {
-    return await generateAndSaveFeedback(params);
+    return await publishFeedbackJob(params);
   } catch (e) {
     logger.error({ err: e, params }, "[createFeedback]");
     return { success: false };
