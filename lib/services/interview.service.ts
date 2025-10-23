@@ -57,7 +57,7 @@ export async function fetchLatestInterviews(
   const interviews = await db.interview.findMany({
     where: {
       finalized: true,
-      NOT: { userId },
+      userId,
       ...(startAfterDate && {
         createdAt: { lt: new Date(startAfterDate) },
       }),
