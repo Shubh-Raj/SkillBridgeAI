@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySignatureAppRouter } from "@upstash/qstash/nextjs";
 import { processFeedbackJob } from "@/lib/services/feedback.service";
 import { logger } from "@/lib/logger";
+import { redis } from "@/lib/redis";
 
 async function handler(req: Request) {
   const body = await req.json();
@@ -14,7 +15,12 @@ async function handler(req: Request) {
   logger.info({ interviewId }, "Started processing background feedback job from QStash");
 
   try {
+    // Process the feedback job (calls Gemini and saves to DB)
     await processFeedbackJob({ interviewId, transcript, userId });
+
+    // Invalidate the cache because the feedback score has now been calculated
+    await redis.del(`user:${userId}:interviews:page1`);
+    await redis.del(`user:${userId}:latest_interviews:page1`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

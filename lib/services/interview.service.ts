@@ -1,9 +1,7 @@
 import { db } from "@/lib/db";
 import { getRandomInterviewCover } from "@/lib/utils";
+import { redis } from "@/lib/redis";
 
-// ─── DTOs ────────────────────────────────────────────────────────────────────
-// These functions map raw Prisma models to clean application types.
-// No Prisma internals (Date objects, _count fields, etc.) leak to the caller.
 
 function toInterviewDTO(
   iv: Awaited<ReturnType<typeof db.interview.findMany>>[number] & {
@@ -24,13 +22,23 @@ function toInterviewDTO(
   };
 }
 
-// ─── Interview Service ────────────────────────────────────────────────────────
-
 export async function fetchInterviewsByUserId(
   userId: string,
   limitCount: number = 20,
   startAfterDate?: string
 ): Promise<Interview[]> {
+  const isFirstPage = !startAfterDate;
+  const cacheKey = `user:${userId}:interviews:page1`;
+
+  if (isFirstPage) {
+    const cachedData = await redis.get<Interview[]>(cacheKey);
+    if (cachedData) {
+      console.log("CACHE HIT: Returning fast data from Redis");
+      return cachedData;
+    }
+  }
+
+  console.log("CACHE MISS: Querying PostgreSQL...");
   const interviews = await db.interview.findMany({
     where: {
       userId,
@@ -46,7 +54,13 @@ export async function fetchInterviewsByUserId(
     },
   });
 
-  return interviews.map(toInterviewDTO);
+  const formattedInterviews = interviews.map(toInterviewDTO);
+
+  if (isFirstPage) {
+    await redis.set(cacheKey, formattedInterviews, { ex: 900 });
+  }
+
+  return formattedInterviews;
 }
 
 export async function fetchLatestInterviews(
@@ -54,6 +68,18 @@ export async function fetchLatestInterviews(
 ): Promise<Interview[]> {
   const { userId, limit = 20, startAfterDate } = params;
 
+  const isFirstPage = !startAfterDate;
+  const cacheKey = `user:${userId}:latest_interviews:page1`;
+
+  if (isFirstPage) {
+    const cachedData = await redis.get<Interview[]>(cacheKey);
+    if (cachedData) {
+      console.log("CACHE HIT: Returning fast data from Redis (latest)");
+      return cachedData;
+    }
+  }
+
+  console.log("CACHE MISS: Querying PostgreSQL (latest)...");
   const interviews = await db.interview.findMany({
     where: {
       finalized: true,
@@ -69,7 +95,13 @@ export async function fetchLatestInterviews(
     },
   });
 
-  return interviews.map(toInterviewDTO);
+  const formattedInterviews = interviews.map(toInterviewDTO);
+
+  if (isFirstPage) {
+    await redis.set(cacheKey, formattedInterviews, { ex: 900 });
+  }
+
+  return formattedInterviews;
 }
 
 export async function fetchInterviewById(
@@ -110,6 +142,9 @@ export async function createInterview(params: {
       },
     },
   });
+
+  await redis.del(`user:${userId}:interviews:page1`);
+  await redis.del(`user:${userId}:latest_interviews:page1`);
 
   return interview.id;
 }
